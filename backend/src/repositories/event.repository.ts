@@ -68,9 +68,13 @@ export class EventRepository {
   }
 
   async update(id: string, payload: UpdateEventPayload): Promise<IEventDocument | null> {
+    // Strip undefined values so Mongoose never tries to $set a field to undefined.
+    const cleanPayload = Object.fromEntries(
+      Object.entries(payload).filter(([, v]) => v !== undefined),
+    ) as UpdateEventPayload;
     return EventModel.findOneAndUpdate(
       { _id: id, isDeleted: false },
-      { $set: payload },
+      { $set: cleanPayload },
       { new: true, runValidators: true },
     );
   }
@@ -162,7 +166,12 @@ export class EventRepository {
       if (filters.status === 'upcoming') query.startAt = { ...(query.startAt as object), $gt: now };
       if (filters.status === 'past') query.endAt = { $lt: now };
       if (filters.status === 'ongoing') {
-        query.startAt = { ...(query.startAt as object), $lte: now };
+        // If startTo was already applied it set a $lte on query.startAt.
+        // Both constraints must hold: startAt <= now AND startAt <= startTo.
+        // Resolve to the more restrictive (smaller) upper bound.
+        const existingLte = (query.startAt as Record<string, Date> | undefined)?.$lte;
+        const lteBound = existingLte !== undefined && existingLte < now ? existingLte : now;
+        query.startAt = { ...(query.startAt as object), $lte: lteBound };
         query.endAt = { $gte: now };
       }
     }

@@ -35,15 +35,25 @@ export const UpdateEventSchema = z
     { message: 'startAt must be before endAt', path: ['startAt'] },
   );
 
-export const ListEventsQuerySchema = z.object({
-  page: z.string().optional(),
-  limit: z.string().optional(),
-  search: z.string().optional(),
-  location: z.string().optional(),
-  status: z.enum(['upcoming', 'ongoing', 'past']).optional(),
-  startFrom: z.string().datetime().optional(),
-  startTo: z.string().datetime().optional(),
-});
+export const ListEventsQuerySchema = z
+  .object({
+    page: z.string().optional(),
+    limit: z.string().optional(),
+    search: z.string().optional(),
+    location: z.string().optional(),
+    status: z.enum(['upcoming', 'ongoing', 'past']).optional(),
+    startFrom: z.string().datetime().optional(),
+    startTo: z.string().datetime().optional(),
+  })
+  .refine(
+    (data) => {
+      if (data.startFrom && data.startTo) {
+        return new Date(data.startFrom) < new Date(data.startTo);
+      }
+      return true;
+    },
+    { message: 'startFrom must be before startTo', path: ['startFrom'] },
+  );
 
 // ── Invitation Schemas ────────────────────────────────────────────────────────
 

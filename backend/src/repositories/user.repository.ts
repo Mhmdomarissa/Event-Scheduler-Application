@@ -1,6 +1,8 @@
 import { FilterQuery, UpdateQuery } from 'mongoose';
 import { IUserDocument, UserModel } from '../models/User';
+import { InvitationModel } from '../models/Invitation';
 import { AppError } from '../utils/AppError';
+import { logger } from '../utils/logger';
 
 interface UpsertPayload {
   firebaseUid: string;
@@ -27,9 +29,9 @@ export class UserRepository {
 
     if (!user) throw AppError.internal('Failed to upsert user');
 
-    // If the user was inserted without a userId link in invitations,
-    // link any pending invitations for this email (fire-and-forget).
-    void this.linkPendingInvitations(user._id as unknown as string, email);
+    // Await invitation linking so that on first login the user immediately
+    // sees events they were invited to by email before registering.
+    await this.linkPendingInvitations((user._id as { toString(): string }).toString(), email);
 
     return user;
   }
@@ -41,13 +43,16 @@ export class UserRepository {
    */
   private async linkPendingInvitations(userId: string, email: string): Promise<void> {
     try {
-      const { InvitationModel } = await import('../models/Invitation');
-      await InvitationModel.updateMany(
+      const result = await InvitationModel.updateMany(
         { email: email.toLowerCase(), inviteeUserId: { $exists: false } },
         { $set: { inviteeUserId: userId } },
       );
-    } catch {
-      // Non-critical background task – log but don't propagate
+      if (result.modifiedCount > 0) {
+        logger.info('Linked pending invitations on login', { userId, count: result.modifiedCount });
+      }
+    } catch (err) {
+      // Non-fatal: user login must not fail because of invitation linking errors.
+      logger.error('Failed to link pending invitations', { userId, error: (err as Error).message });
     }
   }
 

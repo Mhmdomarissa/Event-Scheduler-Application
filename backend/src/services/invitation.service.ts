@@ -30,36 +30,36 @@ export class InvitationService {
       throw AppError.forbidden('Only the event creator or an admin can send invitations');
     }
 
-    const results: Array<{ email: string; status: 'invited' | 'duplicate' | 'error'; invitationId?: string }> = [];
-
-    for (const rawEmail of emails) {
+    // Process all emails in parallel — duplicate check + user lookup + create fire concurrently.
+    const processEmail = async (
+      rawEmail: string,
+    ): Promise<{ email: string; status: 'invited' | 'duplicate' | 'error'; invitationId?: string }> => {
       const email = rawEmail.toLowerCase().trim();
 
-      // Check for duplicate
       const existing = await invitationRepo.findByEventAndEmail(eventId, email);
-      if (existing) {
-        results.push({ email, status: 'duplicate' });
-        continue;
-      }
+      if (existing) return { email, status: 'duplicate' };
 
-      try {
-        // Resolve existing user by email (if any)
-        const existingUser = await userRepo.findByEmail(email);
+      const existingUser = await userRepo.findByEmail(email);
 
-        const invitation = await invitationRepo.create({
-          eventId,
-          email,
-          invitedBy,
-          inviteeUserId: existingUser ? (existingUser._id as { toString(): string }).toString() : undefined,
-        });
+      const invitation = await invitationRepo.create({
+        eventId,
+        email,
+        invitedBy,
+        inviteeUserId: existingUser ? (existingUser._id as { toString(): string }).toString() : undefined,
+      });
 
-        results.push({ email, status: 'invited', invitationId: (invitation._id as { toString(): string }).toString() });
-        logger.info('Invitation sent', { eventId, email, invitationId: invitation._id });
-      } catch (err) {
-        logger.error('Failed to create invitation', { email, eventId, error: err });
-        results.push({ email, status: 'error' });
-      }
-    }
+      logger.info('Invitation sent', { eventId, email, invitationId: invitation._id });
+      return { email, status: 'invited', invitationId: (invitation._id as { toString(): string }).toString() };
+    };
+
+    const settled = await Promise.allSettled(emails.map(processEmail));
+
+    const results = settled.map((result, i) => {
+      const email = emails[i].toLowerCase().trim();
+      if (result.status === 'fulfilled') return result.value;
+      logger.error('Failed to process invitation', { email, eventId, error: result.reason });
+      return { email, status: 'error' as const };
+    });
 
     return results;
   }
