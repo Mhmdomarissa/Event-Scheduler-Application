@@ -108,22 +108,97 @@ Full API contract: [docs/06-api-contract.md](docs/06-api-contract.md)
 
 ## Testing
 
-### Postman
+### Postman Collection (v5 – production-ready)
 
-1. Import `postman/EventScheduler_v5.postman_collection.json`
-2. Import `postman/EventScheduler_v5.postman_environment.json`
-3. Get a Firebase ID token (see collection description for instructions)
-4. Set `FIREBASE_TOKEN` in the environment
-5. Run the collection
+The collection lives in `postman/` and covers all 13 endpoints across 6 folders:
+**Health → Auth → Events → Invitations → AI → Teardown**
 
-### Bash Script
+#### Import
+
+1. Open Postman → **File → Import** → select `postman/EventScheduler_v5.postman_collection.json`
+2. **File → Import** again → select `postman/EventScheduler_v5.postman_environment.json`
+3. Select **Event Scheduler v5** from the environment dropdown (top-right corner)
+
+#### Required environment variables
+
+| Variable | Where to get it |
+|----------|-----------------|
+| `firebase_api_key` | Firebase console → Project Settings → General → **Web API Key** (not the service-account key) |
+| `admin_email` / `admin_password` | Credentials of a user with `role: "admin"` in MongoDB |
+| `member_email` / `member_password` | Credentials of a regular (non-admin) user |
+
+All other variables (`admin_token`, `member_token`, `event_id`, `invitation_id`, …) are
+auto-populated by the collection's pre-request and test scripts – you never need to set them
+manually.
+
+> **Promote a user to admin**
+> ```bash
+> mongosh event-scheduler --eval \
+>   "db.users.updateOne({email:'admin@example.com'},{\$set:{role:'admin'}})"
+> ```
+
+#### Token refresh
+
+A collection-level pre-request script automatically refreshes both tokens before each request
+using the Firebase REST sign-in endpoint:
+```
+POST https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key={{firebase_api_key}}
+```
+Tokens are cached with a 55-minute validity window (5-minute safety buffer). You can also
+paste tokens directly into `admin_token` / `member_token` and leave the credentials blank.
+
+#### Run order
+
+Run the folders **top-to-bottom** (the default Collection Runner order):
+`Health → Auth → Events → Invitations → AI → Teardown`
+
+The Teardown folder deletes test data and unsets all auto-populated variables.
+
+#### pm.test coverage (25+ assertions)
+
+- Auth 401/200, admin-only 403 guards
+- Event create 201, conflict 409, `ignoreConflicts` bypass 201
+- List / search / date-range / status filter 200
+- Get one 200, 404 after delete
+- Update 200, unauthorized 403
+- Invite 200, attendees list 200
+- RSVP attending / maybe / declined 200, wrong-user 403
+- AI parse 200|503, AI suggest shape validation
+- Teardown soft-delete + 404 confirmation
+
+---
+
+### Bash integration test script (`test-api.sh`)
+
+A `curl`-based script that reproduces the same flows without Postman.
+
+#### Prerequisites
+
+You need **two Firebase ID tokens** – one for an admin user and one for a regular member.
+
+**Get a token via the Firebase REST API:**
+```bash
+curl -s -X POST \
+  "https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=<WEB_API_KEY>" \
+  -H "Content-Type: application/json" \
+  -d '{"email":"user@example.com","password":"yourpassword","returnSecureToken":true}' \
+  | python3 -m json.tool | grep idToken
+```
+
+#### Run
 
 ```bash
-export FIREBASE_TOKEN="<your_id_token>"
-export BASE_URL="http://localhost:3000"
+export TOKEN="<admin_firebase_id_token>"
+export MEMBER_TOKEN="<member_firebase_id_token>"
+export BASE_URL="http://localhost:3000"   # optional, this is the default
+export MEMBER_EMAIL="member@example.com" # optional, used as invite target
+
 chmod +x test-api.sh
 ./test-api.sh
 ```
+
+The script prints coloured `[PASS]` / `[FAIL]` / `[SKIP]` lines, a final summary, and exits
+`0` if all assertions pass or `1` if any fail.
 
 ---
 

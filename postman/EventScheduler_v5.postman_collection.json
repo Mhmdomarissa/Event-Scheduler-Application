@@ -1,21 +1,210 @@
 {
   "info": {
-    "name": "Event Scheduler API v5",
-    "_postman_id": "event-scheduler-v5",
-    "description": "Production-grade Event Scheduler API – Version 5.\n\n**How to get a Firebase ID Token (manual flow):**\n1. Open your Firebase project → Authentication → Users.\n2. Use the Firebase REST API or the Firebase JS SDK in a browser console:\n```js\nimport { getAuth, signInWithEmailAndPassword } from 'firebase/auth';\nconst auth = getAuth();\nconst cred = await signInWithEmailAndPassword(auth, 'user@example.com', 'password');\nconst token = await cred.user.getIdToken();\nconsole.log(token); // paste into the FIREBASE_TOKEN environment variable\n```\n3. Set `FIREBASE_TOKEN` in the Postman environment.\n4. All requests use `{{FIREBASE_TOKEN}}` as the Bearer token.",
+    "_postman_id": "es-v5-2026",
+    "name": "Event Scheduler v5 (Production-ready)",
+    "description": "Full end-to-end test collection for Event Scheduler API v5.\n\n## Token Refresh (automatic)\nSet `firebase_api_key`, `admin_email`, `admin_password`, `member_email`, `member_password` in the environment. The collection-level pre-request script calls Firebase REST API and refreshes tokens every 55 minutes automatically.\n\n## Run Order\n1. Health  2. Auth  3. Events  4. Invitations  5. AI  6. Teardown\n\n## Manual fallback\nIf firebase_api_key is unavailable, paste tokens directly into `admin_token` / `member_token` in the environment (valid for 1 hour).",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
-  "variable": [],
+  "event": [
+    {
+      "listen": "prerequest",
+      "script": {
+        "id": "col-pre",
+        "type": "text/javascript",
+        "exec": [
+          "var now=Date.now(),BUFFER=5*60*1000;",
+          "var apiKey=pm.environment.get('firebase_api_key');",
+          "function isStale(t,e){",
+          "  var tok=pm.environment.get(t),exp=parseInt(pm.environment.get(e)||'0');",
+          "  return !tok||tok.startsWith('PASTE_')||now>=exp-BUFFER;",
+          "}",
+          "function refreshToken(type,done){",
+          "  var email=pm.environment.get(type+'_email'),pass=pm.environment.get(type+'_password');",
+          "  if(!apiKey||!email||!pass||email.startsWith('your_')||pass.startsWith('your_')){",
+          "    console.warn('[Token] '+type+' creds not configured');done();return;",
+          "  }",
+          "  pm.sendRequest({",
+          "    url:'https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key='+apiKey,",
+          "    method:'POST',",
+          "    header:[{key:'Content-Type',value:'application/json'}],",
+          "    body:{mode:'raw',raw:JSON.stringify({email:email,password:pass,returnSecureToken:true})}},",
+          "    function(err,resp){",
+          "      if(err||resp.code!==200){",
+          "        console.warn('[Token] refresh '+type+' failed:',err?err.message:resp.text());",
+          "      }else{",
+          "        var b=resp.json();",
+          "        pm.environment.set(type+'_token',b.idToken);",
+          "        pm.environment.set('_'+type+'_token_expiry',String(now+55*60*1000));",
+          "        console.log('[Token] '+type+' token refreshed (~55 min)');",
+          "      }",
+          "      done();",
+          "    }",
+          "  );",
+          "}",
+          "if(isStale('admin_token','_admin_token_expiry')){",
+          "  refreshToken('admin',function(){",
+          "    if(isStale('member_token','_member_token_expiry'))refreshToken('member',function(){});",
+          "  });",
+          "}else if(isStale('member_token','_member_token_expiry')){",
+          "  refreshToken('member',function(){});",
+          "}"
+        ]
+      }
+    }
+  ],
   "item": [
+    {
+      "name": "Health",
+      "item": [
+        {
+          "name": "GET /health – ok",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 healthy or 503 degraded',function(){pm.expect([200,503]).to.include(pm.response.code);});",
+                  "pm.test('response time <1s',function(){pm.expect(pm.response.responseTime).to.be.below(1000);});",
+                  "var j=pm.response.json();",
+                  "pm.test('status field present',function(){pm.expect(['ok','degraded']).to.include(j.status);});",
+                  "pm.test('services.database present',function(){pm.expect(['connected','disconnected']).to.include(j.services.database);});",
+                  "pm.test('DB connected (200)',function(){pm.expect(pm.response.code).to.equal(200);pm.expect(j.services.database).to.equal('connected');});",
+                  "pm.test('has valid timestamp',function(){pm.expect(new Date(j.timestamp).getTime()).to.be.a('number');});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/health",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "health"
+              ]
+            }
+          }
+        }
+      ]
+    },
     {
       "name": "Auth",
       "item": [
         {
-          "name": "GET /api/auth/me",
+          "name": "GET /api/auth/me – admin profile (200)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200',function(){pm.response.to.have.status(200);});",
+                  "var j=pm.response.json();",
+                  "pm.test('success true',function(){pm.expect(j.success).to.be.true;});",
+                  "pm.test('data._id',function(){pm.expect(j.data).to.have.property('_id');});",
+                  "pm.test('data.email',function(){pm.expect(j.data).to.have.property('email');});",
+                  "pm.test('role valid',function(){pm.expect(['member','admin']).to.include(j.data.role);});",
+                  "pm.test('isActive true',function(){pm.expect(j.data.isActive).to.be.true;});",
+                  "pm.environment.set('admin_user_id',j.data._id);",
+                  "console.log('Admin ID:',j.data._id,'Role:',j.data.role);"
+                ]
+              }
+            }
+          ],
           "request": {
             "method": "GET",
-            "header": [{ "key": "Authorization", "value": "Bearer {{FIREBASE_TOKEN}}" }],
-            "url": { "raw": "{{BASE_URL}}/api/auth/me", "host": ["{{BASE_URL}}"], "path": ["api", "auth", "me"] }
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/auth/me",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "me"
+              ]
+            }
+          }
+        },
+        {
+          "name": "GET /api/auth/me – member profile (200)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200',function(){pm.response.to.have.status(200);});",
+                  "var j=pm.response.json();",
+                  "pm.test('success true',function(){pm.expect(j.success).to.be.true;});",
+                  "pm.test('data._id',function(){pm.expect(j.data).to.have.property('_id');});",
+                  "pm.environment.set('member_user_id',j.data._id);",
+                  "pm.environment.set('member_email_resolved',j.data.email);",
+                  "console.log('Member ID:',j.data._id,'Email:',j.data.email);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{member_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/auth/me",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "me"
+              ]
+            }
+          }
+        },
+        {
+          "name": "GET /api/auth/me – 401 no token",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('401 no token',function(){pm.response.to.have.status(401);});",
+                  "pm.test('success false',function(){pm.expect(pm.response.json().success).to.be.false;});",
+                  "pm.test('message present',function(){pm.expect(pm.response.json()).to.have.property('message');});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/auth/me",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "me"
+              ]
+            }
           }
         }
       ]
@@ -24,145 +213,645 @@
       "name": "Events",
       "item": [
         {
-          "name": "POST /api/events – Create",
+          "name": "POST /api/events – create (201)",
           "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "var d=new Date();d.setUTCDate(d.getUTCDate()+3);d.setUTCHours(10,0,0,0);",
+                  "var s=d.toISOString();d.setUTCHours(12,0,0,0);var e=d.toISOString();",
+                  "pm.variables.set('ev_start',s);pm.variables.set('ev_end',e);",
+                  "pm.environment.set('ev_start_saved',s);pm.environment.set('ev_end_saved',e);"
+                ]
+              }
+            },
             {
               "listen": "test",
               "script": {
+                "type": "text/javascript",
                 "exec": [
-                  "const json = pm.response.json();",
-                  "pm.test('Status 201', () => pm.response.to.have.status(201));",
-                  "pm.test('Has _id', () => pm.expect(json.data).to.have.property('_id'));",
-                  "pm.environment.set('EVENT_ID', json.data._id);"
-                ],
-                "type": "text/javascript"
+                  "pm.test('201',function(){pm.response.to.have.status(201);});",
+                  "var j=pm.response.json();",
+                  "pm.test('success true',function(){pm.expect(j.success).to.be.true;});",
+                  "pm.test('data._id',function(){pm.expect(j.data).to.have.property('_id');});",
+                  "pm.test('title QA Test Event',function(){pm.expect(j.data.title).to.equal('QA Test Event');});",
+                  "pm.test('visibility shared',function(){pm.expect(j.data.visibility).to.equal('shared');});",
+                  "pm.test('isDeleted false',function(){pm.expect(j.data.isDeleted).to.be.false;});",
+                  "pm.environment.set('event_id',j.data._id);",
+                  "console.log('event_id:',j.data._id);"
+                ]
               }
             }
           ],
           "request": {
             "method": "POST",
             "header": [
-              { "key": "Authorization", "value": "Bearer {{FIREBASE_TOKEN}}" },
-              { "key": "Content-Type", "value": "application/json" }
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
             ],
+            "url": {
+              "raw": "{{base_url}}/api/events",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "events"
+              ]
+            },
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"title\": \"Team Sync\",\n  \"description\": \"Weekly alignment\",\n  \"location\": \"Zoom\",\n  \"startAt\": \"2026-04-01T09:00:00.000Z\",\n  \"endAt\": \"2026-04-01T10:00:00.000Z\",\n  \"visibility\": \"shared\"\n}"
-            },
-            "url": { "raw": "{{BASE_URL}}/api/events", "host": ["{{BASE_URL}}"], "path": ["api", "events"] }
+              "raw": "{\"title\":\"QA Test Event\",\"description\":\"Automated QA event\",\"location\":\"Virtual – Test Room\",\"startAt\":\"{{ev_start}}\",\"endAt\":\"{{ev_end}}\",\"visibility\":\"shared\"}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
           }
         },
         {
-          "name": "GET /api/events – List",
+          "name": "POST /api/events – conflict detection (409)",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.variables.set('ev_start',pm.environment.get('ev_start_saved'));",
+                  "pm.variables.set('ev_end',pm.environment.get('ev_end_saved'));"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('409 conflict',function(){pm.response.to.have.status(409);});",
+                  "var j=pm.response.json();",
+                  "pm.test('success false',function(){pm.expect(j.success).to.be.false;});",
+                  "pm.test('message mentions conflict',function(){pm.expect(j.message.toLowerCase()).to.include('conflict');});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/events",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "events"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\"title\":\"Conflict Event\",\"description\":\"same slot\",\"location\":\"X\",\"startAt\":\"{{ev_start}}\",\"endAt\":\"{{ev_end}}\",\"visibility\":\"private\"}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "POST /api/events – ignoreConflicts=true bypass (201)",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.variables.set('ev_start',pm.environment.get('ev_start_saved'));",
+                  "pm.variables.set('ev_end',pm.environment.get('ev_end_saved'));"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('201 with ignoreConflicts',function(){pm.response.to.have.status(201);});",
+                  "var j=pm.response.json();",
+                  "pm.test('success true',function(){pm.expect(j.success).to.be.true;});",
+                  "pm.test('data._id',function(){pm.expect(j.data).to.have.property('_id');});",
+                  "pm.environment.set('bypass_event_id',j.data._id);",
+                  "console.log('bypass_event_id:',j.data._id);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/events",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "events"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\"title\":\"Bypass Event\",\"description\":\"ignoreConflicts bypass\",\"location\":\"Overlap\",\"startAt\":\"{{ev_start}}\",\"endAt\":\"{{ev_end}}\",\"visibility\":\"private\",\"ignoreConflicts\":true}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "POST /api/events – 401 no token",
           "event": [
             {
               "listen": "test",
               "script": {
-                "exec": ["pm.test('Status 200', () => pm.response.to.have.status(200));"],
-                "type": "text/javascript"
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('401',function(){pm.response.to.have.status(401);});",
+                  "pm.test('success false',function(){pm.expect(pm.response.json().success).to.be.false;});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/events",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "events"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\"title\":\"No Auth\",\"startAt\":\"2026-06-01T10:00:00Z\",\"endAt\":\"2026-06-01T11:00:00Z\"}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "GET /api/events – list includes created event (200)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200',function(){pm.response.to.have.status(200);});",
+                  "var j=pm.response.json();",
+                  "pm.test('success true',function(){pm.expect(j.success).to.be.true;});",
+                  "pm.test('data array',function(){pm.expect(j.data).to.be.an('array');});",
+                  "pm.test('meta pagination',function(){pm.expect(j.meta).to.have.all.keys('total','page','limit','totalPages','hasNext','hasPrev');});",
+                  "var id=pm.environment.get('event_id');",
+                  "pm.test('created event in list',function(){pm.expect(j.data.some(function(e){return e._id===id;})).to.be.true;});"
+                ]
               }
             }
           ],
           "request": {
             "method": "GET",
-            "header": [{ "key": "Authorization", "value": "Bearer {{FIREBASE_TOKEN}}" }],
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}"
+              }
+            ],
             "url": {
-              "raw": "{{BASE_URL}}/api/events?page=1&limit=10",
-              "host": ["{{BASE_URL}}"],
-              "path": ["api", "events"],
+              "raw": "{{base_url}}/api/events?page=1&limit=20",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "events"
+              ],
               "query": [
-                { "key": "page", "value": "1" },
-                { "key": "limit", "value": "10" }
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "limit",
+                  "value": "20"
+                }
               ]
             }
           }
         },
         {
-          "name": "GET /api/events/:id – Get One",
+          "name": "GET /api/events – text search (200)",
           "event": [
             {
               "listen": "test",
               "script": {
-                "exec": ["pm.test('Status 200', () => pm.response.to.have.status(200));"],
-                "type": "text/javascript"
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200',function(){pm.response.to.have.status(200);});",
+                  "var j=pm.response.json();",
+                  "pm.test('success true',function(){pm.expect(j.success).to.be.true;});",
+                  "pm.test('at least 1 result',function(){pm.expect(j.meta.total).to.be.at.least(1);});"
+                ]
               }
             }
           ],
           "request": {
             "method": "GET",
-            "header": [{ "key": "Authorization", "value": "Bearer {{FIREBASE_TOKEN}}" }],
-            "url": { "raw": "{{BASE_URL}}/api/events/{{EVENT_ID}}", "host": ["{{BASE_URL}}"], "path": ["api", "events", "{{EVENT_ID}}"] }
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/events?search=QA Test",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "events"
+              ],
+              "query": [
+                {
+                  "key": "search",
+                  "value": "QA Test"
+                }
+              ]
+            }
           }
         },
         {
-          "name": "PATCH /api/events/:id – Update",
+          "name": "GET /api/events – date range filter (200)",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "var from=new Date();from.setUTCDate(from.getUTCDate()+1);from.setUTCHours(0,0,0,0);",
+                  "var to=new Date();to.setUTCDate(to.getUTCDate()+7);to.setUTCHours(23,59,59,999);",
+                  "pm.variables.set('range_from',from.toISOString());pm.variables.set('range_to',to.toISOString());"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200',function(){pm.response.to.have.status(200);});",
+                  "var j=pm.response.json();",
+                  "pm.test('success true',function(){pm.expect(j.success).to.be.true;});",
+                  "var id=pm.environment.get('event_id');",
+                  "pm.test('created event in range',function(){pm.expect(j.data.some(function(e){return e._id===id;})).to.be.true;});",
+                  "pm.test('all startAt within range',function(){",
+                  "  var from=new Date(pm.variables.get('range_from')).getTime(),to=new Date(pm.variables.get('range_to')).getTime();",
+                  "  j.data.forEach(function(e){var s=new Date(e.startAt).getTime();pm.expect(s,'event '+e._id).to.be.within(from,to);});",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/events?startFrom={{range_from}}&startTo={{range_to}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "events"
+              ],
+              "query": [
+                {
+                  "key": "startFrom",
+                  "value": "{{range_from}}"
+                },
+                {
+                  "key": "startTo",
+                  "value": "{{range_to}}"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "GET /api/events – status=upcoming (200)",
           "event": [
             {
               "listen": "test",
               "script": {
-                "exec": ["pm.test('Status 200', () => pm.response.to.have.status(200));"],
-                "type": "text/javascript"
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200',function(){pm.response.to.have.status(200);});",
+                  "var j=pm.response.json();",
+                  "pm.test('success true',function(){pm.expect(j.success).to.be.true;});",
+                  "pm.test('all startAt > now',function(){",
+                  "  var now=Date.now();",
+                  "  j.data.forEach(function(e){pm.expect(new Date(e.startAt).getTime(),'event '+e._id).to.be.above(now);});",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/events?status=upcoming",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "events"
+              ],
+              "query": [
+                {
+                  "key": "status",
+                  "value": "upcoming"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "GET /api/events – startFrom>startTo validation (400)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('400 invalid date range',function(){pm.response.to.have.status(400);});",
+                  "var j=pm.response.json();",
+                  "pm.test('success false',function(){pm.expect(j.success).to.be.false;});",
+                  "pm.test('error mentions startFrom',function(){pm.expect(j.message.toLowerCase()).to.include('startfrom');});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/events?startFrom=2026-12-31T00:00:00.000Z&startTo=2026-01-01T00:00:00.000Z",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "events"
+              ],
+              "query": [
+                {
+                  "key": "startFrom",
+                  "value": "2026-12-31T00:00:00.000Z"
+                },
+                {
+                  "key": "startTo",
+                  "value": "2026-01-01T00:00:00.000Z"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "GET /api/events/:id – get one (200)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200',function(){pm.response.to.have.status(200);});",
+                  "var j=pm.response.json();",
+                  "pm.test('success true',function(){pm.expect(j.success).to.be.true;});",
+                  "pm.test('_id matches event_id',function(){pm.expect(j.data._id).to.equal(pm.environment.get('event_id'));});",
+                  "pm.test('title QA Test Event',function(){pm.expect(j.data.title).to.equal('QA Test Event');});",
+                  "pm.test('isDeleted false',function(){pm.expect(j.data.isDeleted).to.be.false;});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/events/{{event_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "events",
+                "{{event_id}}"
+              ]
+            }
+          }
+        },
+        {
+          "name": "GET /api/events/:id – 401 no token",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('401',function(){pm.response.to.have.status(401);});",
+                  "pm.test('success false',function(){pm.expect(pm.response.json().success).to.be.false;});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/events/{{event_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "events",
+                "{{event_id}}"
+              ]
+            }
+          }
+        },
+        {
+          "name": "PATCH /api/events/:id – update title + location (200)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200',function(){pm.response.to.have.status(200);});",
+                  "var j=pm.response.json();",
+                  "pm.test('success true',function(){pm.expect(j.success).to.be.true;});",
+                  "pm.test('_id unchanged',function(){pm.expect(j.data._id).to.equal(pm.environment.get('event_id'));});",
+                  "pm.test('title updated',function(){pm.expect(j.data.title).to.equal('QA Test Event – Updated');});",
+                  "pm.test('location updated',function(){pm.expect(j.data.location).to.equal('Updated Virtual Room');});"
+                ]
               }
             }
           ],
           "request": {
             "method": "PATCH",
             "header": [
-              { "key": "Authorization", "value": "Bearer {{FIREBASE_TOKEN}}" },
-              { "key": "Content-Type", "value": "application/json" }
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
             ],
-            "body": { "mode": "raw", "raw": "{\n  \"title\": \"Team Sync (Updated)\",\n  \"location\": \"Google Meet\"\n}" },
-            "url": { "raw": "{{BASE_URL}}/api/events/{{EVENT_ID}}", "host": ["{{BASE_URL}}"], "path": ["api", "events", "{{EVENT_ID}}"] }
-          }
-        },
-        {
-          "name": "DELETE /api/events/:id – Soft Delete",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "exec": ["pm.test('Status 204', () => pm.response.to.have.status(204));"],
-                "type": "text/javascript"
+            "url": {
+              "raw": "{{base_url}}/api/events/{{event_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "events",
+                "{{event_id}}"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\"title\":\"QA Test Event – Updated\",\"location\":\"Updated Virtual Room\"}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
               }
             }
-          ],
-          "request": {
-            "method": "DELETE",
-            "header": [{ "key": "Authorization", "value": "Bearer {{FIREBASE_TOKEN}}" }],
-            "url": { "raw": "{{BASE_URL}}/api/events/{{EVENT_ID}}", "host": ["{{BASE_URL}}"], "path": ["api", "events", "{{EVENT_ID}}"] }
           }
         },
         {
-          "name": "POST /api/events/:id/invite",
+          "name": "PATCH /api/events/:id – 403 non-owner member",
           "event": [
             {
               "listen": "test",
               "script": {
+                "type": "text/javascript",
                 "exec": [
-                  "pm.test('Status 201', () => pm.response.to.have.status(201));",
-                  "const json = pm.response.json();",
-                  "if (json.data && json.data[0]) pm.environment.set('INVITATION_ID', json.data[0].invitationId);"
-                ],
-                "type": "text/javascript"
+                  "pm.test('403 non-owner',function(){pm.response.to.have.status(403);});",
+                  "pm.test('success false',function(){pm.expect(pm.response.json().success).to.be.false;});"
+                ]
               }
             }
           ],
           "request": {
-            "method": "POST",
+            "method": "PATCH",
             "header": [
-              { "key": "Authorization", "value": "Bearer {{FIREBASE_TOKEN}}" },
-              { "key": "Content-Type", "value": "application/json" }
+              {
+                "key": "Authorization",
+                "value": "Bearer {{member_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
             ],
-            "body": { "mode": "raw", "raw": "{\n  \"emails\": [\"invitee@example.com\"]\n}" },
-            "url": { "raw": "{{BASE_URL}}/api/events/{{EVENT_ID}}/invite", "host": ["{{BASE_URL}}"], "path": ["api", "events", "{{EVENT_ID}}", "invite"] }
-          }
-        },
-        {
-          "name": "GET /api/events/:id/attendees",
-          "request": {
-            "method": "GET",
-            "header": [{ "key": "Authorization", "value": "Bearer {{FIREBASE_TOKEN}}" }],
-            "url": { "raw": "{{BASE_URL}}/api/events/{{EVENT_ID}}/attendees", "host": ["{{BASE_URL}}"], "path": ["api", "events", "{{EVENT_ID}}", "attendees"] }
+            "url": {
+              "raw": "{{base_url}}/api/events/{{event_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "events",
+                "{{event_id}}"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\"title\":\"Hacked\"}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
           }
         }
       ]
@@ -171,41 +860,440 @@
       "name": "Invitations",
       "item": [
         {
-          "name": "GET /api/invitations – My Invitations",
+          "name": "POST /api/events/:id/invite – invite member (200)",
           "event": [
             {
-              "listen": "test",
+              "listen": "prerequest",
               "script": {
-                "exec": ["pm.test('Status 200', () => pm.response.to.have.status(200));"],
-                "type": "text/javascript"
+                "type": "text/javascript",
+                "exec": [
+                  "var em=pm.environment.get('member_email');if(!em||em.startsWith('your_'))console.warn('[Invite] member_email not set');"
+                ]
               }
-            }
-          ],
-          "request": {
-            "method": "GET",
-            "header": [{ "key": "Authorization", "value": "Bearer {{FIREBASE_TOKEN}}" }],
-            "url": { "raw": "{{BASE_URL}}/api/invitations", "host": ["{{BASE_URL}}"], "path": ["api", "invitations"] }
-          }
-        },
-        {
-          "name": "POST /api/invitations/:id/respond – RSVP",
-          "event": [
+            },
             {
               "listen": "test",
               "script": {
-                "exec": ["pm.test('Status 200', () => pm.response.to.have.status(200));"],
-                "type": "text/javascript"
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200',function(){pm.response.to.have.status(200);});",
+                  "var j=pm.response.json();",
+                  "pm.test('success true',function(){pm.expect(j.success).to.be.true;});",
+                  "pm.test('results >=1',function(){pm.expect(j.data).to.be.an('array').with.length.at.least(1);});",
+                  "var r=j.data[0];",
+                  "pm.test('status invited or duplicate',function(){pm.expect(['invited','duplicate']).to.include(r.status);});",
+                  "if(r&&r.invitationId){pm.environment.set('invitation_id',r.invitationId);console.log('invitation_id:',r.invitationId);}"
+                ]
               }
             }
           ],
           "request": {
             "method": "POST",
             "header": [
-              { "key": "Authorization", "value": "Bearer {{FIREBASE_TOKEN}}" },
-              { "key": "Content-Type", "value": "application/json" }
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
             ],
-            "body": { "mode": "raw", "raw": "{\n  \"status\": \"attending\"\n}" },
-            "url": { "raw": "{{BASE_URL}}/api/invitations/{{INVITATION_ID}}/respond", "host": ["{{BASE_URL}}"], "path": ["api", "invitations", "{{INVITATION_ID}}", "respond"] }
+            "url": {
+              "raw": "{{base_url}}/api/events/{{event_id}}/invite",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "events",
+                "{{event_id}}",
+                "invite"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\"emails\":[\"{{member_email}}\"]}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "POST /api/events/:id/invite – 403 non-creator member",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('403 member cannot invite',function(){pm.response.to.have.status(403);});",
+                  "pm.test('success false',function(){pm.expect(pm.response.json().success).to.be.false;});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{member_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/events/{{event_id}}/invite",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "events",
+                "{{event_id}}",
+                "invite"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\"emails\":[\"other@example.com\"]}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "GET /api/events/:id/attendees – initial invited status (200)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200',function(){pm.response.to.have.status(200);});",
+                  "var j=pm.response.json();",
+                  "pm.test('success true',function(){pm.expect(j.success).to.be.true;});",
+                  "pm.test('data array',function(){pm.expect(j.data).to.be.an('array');});",
+                  "pm.test('meta present',function(){pm.expect(j).to.have.property('meta');});",
+                  "var em=pm.environment.get('member_email')||pm.environment.get('member_email_resolved');",
+                  "var found=j.data.find(function(i){return i.email===em;});",
+                  "pm.test('member in attendees',function(){pm.expect(found,'member email: '+em).to.not.be.undefined;});",
+                  "if(found&&!pm.environment.get('invitation_id')){pm.environment.set('invitation_id',found._id);console.log('invitation_id from attendees:',found._id);}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/events/{{event_id}}/attendees",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "events",
+                "{{event_id}}",
+                "attendees"
+              ]
+            }
+          }
+        },
+        {
+          "name": "GET /api/invitations – member sees own invitation (200)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200',function(){pm.response.to.have.status(200);});",
+                  "var j=pm.response.json();",
+                  "pm.test('success true',function(){pm.expect(j.success).to.be.true;});",
+                  "pm.test('data array',function(){pm.expect(j.data).to.be.an('array');});",
+                  "pm.test('meta present',function(){pm.expect(j).to.have.property('meta');});",
+                  "var eid=pm.environment.get('event_id');",
+                  "var inv=j.data.find(function(i){return i.eventId===eid||(i.eventId&&i.eventId._id===eid);});",
+                  "pm.test('invitation for test event present',function(){pm.expect(inv).to.not.be.undefined;});",
+                  "if(inv&&!pm.environment.get('invitation_id')){pm.environment.set('invitation_id',inv._id);console.log('invitation_id from list:',inv._id);}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{member_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/invitations",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "invitations"
+              ]
+            }
+          }
+        },
+        {
+          "name": "POST /api/invitations/:id/respond – attending (200)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200',function(){pm.response.to.have.status(200);});",
+                  "var j=pm.response.json();",
+                  "pm.test('success true',function(){pm.expect(j.success).to.be.true;});",
+                  "pm.test('status attending',function(){pm.expect(j.data.status).to.equal('attending');});",
+                  "pm.test('respondedAt set',function(){pm.expect(j.data.respondedAt).to.not.be.null;});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{member_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/invitations/{{invitation_id}}/respond",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "invitations",
+                "{{invitation_id}}",
+                "respond"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\"status\":\"attending\"}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "POST /api/invitations/:id/respond – maybe (200)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200',function(){pm.response.to.have.status(200);});",
+                  "pm.test('status maybe',function(){pm.expect(pm.response.json().data.status).to.equal('maybe');});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{member_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/invitations/{{invitation_id}}/respond",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "invitations",
+                "{{invitation_id}}",
+                "respond"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\"status\":\"maybe\"}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "POST /api/invitations/:id/respond – declined (200)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200',function(){pm.response.to.have.status(200);});",
+                  "pm.test('status declined',function(){pm.expect(pm.response.json().data.status).to.equal('declined');});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{member_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/invitations/{{invitation_id}}/respond",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "invitations",
+                "{{invitation_id}}",
+                "respond"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\"status\":\"declined\"}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "POST /api/invitations/:id/respond – 403 wrong user (admin)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('403 wrong user',function(){pm.response.to.have.status(403);});",
+                  "pm.test('success false',function(){pm.expect(pm.response.json().success).to.be.false;});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/invitations/{{invitation_id}}/respond",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "invitations",
+                "{{invitation_id}}",
+                "respond"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\"status\":\"attending\"}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "GET /api/events/:id/attendees – RSVP status verified (200)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200',function(){pm.response.to.have.status(200);});",
+                  "var j=pm.response.json();",
+                  "pm.test('success true',function(){pm.expect(j.success).to.be.true;});",
+                  "var em=pm.environment.get('member_email')||pm.environment.get('member_email_resolved');",
+                  "var inv=j.data.find(function(i){return i.email===em;});",
+                  "pm.test('member present',function(){pm.expect(inv).to.not.be.undefined;});",
+                  "pm.test('RSVP responded status',function(){pm.expect(['attending','maybe','declined']).to.include(inv.status);});",
+                  "pm.test('respondedAt populated',function(){pm.expect(inv.respondedAt).to.not.be.null;});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/events/{{event_id}}/attendees",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "events",
+                "{{event_id}}",
+                "attendees"
+              ]
+            }
           }
         }
       ]
@@ -214,66 +1302,288 @@
       "name": "AI",
       "item": [
         {
-          "name": "POST /api/ai/parse-event",
+          "name": "POST /api/ai/parse-event – 200 or 503 (graceful)",
           "event": [
             {
               "listen": "test",
               "script": {
+                "type": "text/javascript",
                 "exec": [
-                  "pm.test('Status 200 or 503', () => pm.expect([200, 503]).to.include(pm.response.code));"
-                ],
-                "type": "text/javascript"
+                  "pm.test('200 (key set) or 503 (no key)',function(){pm.expect([200,503]).to.include(pm.response.code);});",
+                  "var j=pm.response.json();",
+                  "pm.test('valid JSON with success field',function(){pm.expect(j).to.have.property('success');});",
+                  "if(pm.response.code===200){",
+                  "  pm.test('200: data.title',function(){pm.expect(j.data).to.have.property('title');});",
+                  "  pm.test('200: data.startAt',function(){pm.expect(j.data).to.have.property('startAt');});",
+                  "}else{",
+                  "  pm.test('503: message non-empty',function(){pm.expect(j.message).to.be.a('string').and.not.be.empty;});",
+                  "}"
+                ]
               }
             }
           ],
           "request": {
             "method": "POST",
             "header": [
-              { "key": "Authorization", "value": "Bearer {{FIREBASE_TOKEN}}" },
-              { "key": "Content-Type", "value": "application/json" }
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
             ],
-            "body": { "mode": "raw", "raw": "{\n  \"text\": \"Product demo with the design team next Monday at 2pm for 45 minutes in the main conference room\"\n}" },
-            "url": { "raw": "{{BASE_URL}}/api/ai/parse-event", "host": ["{{BASE_URL}}"], "path": ["api", "ai", "parse-event"] }
+            "url": {
+              "raw": "{{base_url}}/api/ai/parse-event",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "ai",
+                "parse-event"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\"text\":\"Schedule a team retrospective next Monday at 2pm for 90 minutes in the conference room\"}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
           }
         },
         {
-          "name": "POST /api/ai/suggest-times",
+          "name": "POST /api/ai/suggest-times – shape validated (200)",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "var s=new Date();s.setUTCDate(s.getUTCDate()+1);s.setUTCHours(8,0,0,0);",
+                  "var e=new Date(s);e.setUTCDate(e.getUTCDate()+6);e.setUTCHours(20,0,0,0);",
+                  "pm.variables.set('sug_start',s.toISOString());pm.variables.set('sug_end',e.toISOString());"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200',function(){pm.response.to.have.status(200);});",
+                  "var j=pm.response.json();",
+                  "pm.test('success true',function(){pm.expect(j.success).to.be.true;});",
+                  "pm.test('data.slots array',function(){pm.expect(j.data).to.have.property('slots');pm.expect(j.data.slots).to.be.an('array');});",
+                  "pm.test('at least 1 slot',function(){pm.expect(j.data.slots.length).to.be.at.least(1);});",
+                  "pm.test('slots have startAt+endAt',function(){",
+                  "  j.data.slots.forEach(function(s){",
+                  "    pm.expect(s).to.have.all.keys('startAt','endAt');",
+                  "    pm.expect(new Date(s.startAt).getTime()).to.be.a('number');",
+                  "    pm.expect(new Date(s.endAt).getTime()).to.be.a('number');",
+                  "  });",
+                  "});",
+                  "pm.test('slot duration=60min',function(){var s=j.data.slots[0];pm.expect((new Date(s.endAt)-new Date(s.startAt))/60000).to.equal(60);});"
+                ]
+              }
+            }
+          ],
           "request": {
             "method": "POST",
             "header": [
-              { "key": "Authorization", "value": "Bearer {{FIREBASE_TOKEN}}" },
-              { "key": "Content-Type", "value": "application/json" }
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
             ],
+            "url": {
+              "raw": "{{base_url}}/api/ai/suggest-times",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "ai",
+                "suggest-times"
+              ]
+            },
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"title\": \"Design Review\",\n  \"durationMinutes\": 60,\n  \"dateRangeStart\": \"2026-04-01T00:00:00.000Z\",\n  \"dateRangeEnd\": \"2026-04-05T23:59:59.000Z\",\n  \"timezone\": \"America/New_York\"\n}"
+              "raw": "{\"title\":\"Engineering standup\",\"durationMinutes\":60,\"dateRangeStart\":\"{{sug_start}}\",\"dateRangeEnd\":\"{{sug_end}}\"}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "POST /api/ai/parse-event – 401 no token",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('401',function(){pm.response.to.have.status(401);});",
+                  "pm.test('success false',function(){pm.expect(pm.response.json().success).to.be.false;});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/ai/parse-event",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "ai",
+                "parse-event"
+              ]
             },
-            "url": { "raw": "{{BASE_URL}}/api/ai/suggest-times", "host": ["{{BASE_URL}}"], "path": ["api", "ai", "suggest-times"] }
+            "body": {
+              "mode": "raw",
+              "raw": "{\"text\":\"Meeting tomorrow 3pm\"}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
           }
         }
       ]
     },
     {
-      "name": "Health",
+      "name": "Teardown",
+      "description": "Clean up all resources created during the test run. Safe to re-run.",
       "item": [
         {
-          "name": "GET /health",
+          "name": "DELETE /api/events/:event_id – soft-delete main event (200)",
           "event": [
             {
               "listen": "test",
               "script": {
+                "type": "text/javascript",
                 "exec": [
-                  "pm.test('Status 200 or 503', () => pm.expect([200, 503]).to.include(pm.response.code));",
-                  "pm.test('Has status field', () => pm.expect(pm.response.json()).to.have.property('status'));"
-                ],
-                "type": "text/javascript"
+                  "pm.test('200',function(){pm.response.to.have.status(200);});",
+                  "var j=pm.response.json();",
+                  "pm.test('success true',function(){pm.expect(j.success).to.be.true;});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/events/{{event_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "events",
+                "{{event_id}}"
+              ]
+            }
+          }
+        },
+        {
+          "name": "GET /api/events/:event_id – 404 after soft-delete",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('404 after soft-delete',function(){pm.response.to.have.status(404);});",
+                  "var j=pm.response.json();",
+                  "pm.test('success false',function(){pm.expect(j.success).to.be.false;});",
+                  "pm.test('message not found',function(){pm.expect(j.message.toLowerCase()).to.satisfy(function(m){return m.includes('not found')||m.includes('does not exist');});});"
+                ]
               }
             }
           ],
           "request": {
             "method": "GET",
-            "header": [],
-            "url": { "raw": "{{BASE_URL}}/health", "host": ["{{BASE_URL}}"], "path": ["health"] }
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/events/{{event_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "events",
+                "{{event_id}}"
+              ]
+            }
+          }
+        },
+        {
+          "name": "DELETE /api/events/:bypass_event_id – soft-delete bypass event (200)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200',function(){pm.response.to.have.status(200);});",
+                  "['event_id','bypass_event_id','invitation_id','ev_start_saved','ev_end_saved',",
+                  " 'admin_user_id','member_user_id','member_email_resolved'].forEach(function(k){pm.environment.unset(k);});",
+                  "console.log('Teardown complete – test variables cleared.');"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/events/{{bypass_event_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "events",
+                "{{bypass_event_id}}"
+              ]
+            }
           }
         }
       ]
