@@ -1,0 +1,282 @@
+{
+  "info": {
+    "name": "Event Scheduler API v5",
+    "_postman_id": "event-scheduler-v5",
+    "description": "Production-grade Event Scheduler API – Version 5.\n\n**How to get a Firebase ID Token (manual flow):**\n1. Open your Firebase project → Authentication → Users.\n2. Use the Firebase REST API or the Firebase JS SDK in a browser console:\n```js\nimport { getAuth, signInWithEmailAndPassword } from 'firebase/auth';\nconst auth = getAuth();\nconst cred = await signInWithEmailAndPassword(auth, 'user@example.com', 'password');\nconst token = await cred.user.getIdToken();\nconsole.log(token); // paste into the FIREBASE_TOKEN environment variable\n```\n3. Set `FIREBASE_TOKEN` in the Postman environment.\n4. All requests use `{{FIREBASE_TOKEN}}` as the Bearer token.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [],
+  "item": [
+    {
+      "name": "Auth",
+      "item": [
+        {
+          "name": "GET /api/auth/me",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{FIREBASE_TOKEN}}" }],
+            "url": { "raw": "{{BASE_URL}}/api/auth/me", "host": ["{{BASE_URL}}"], "path": ["api", "auth", "me"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Events",
+      "item": [
+        {
+          "name": "POST /api/events – Create",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const json = pm.response.json();",
+                  "pm.test('Status 201', () => pm.response.to.have.status(201));",
+                  "pm.test('Has _id', () => pm.expect(json.data).to.have.property('_id'));",
+                  "pm.environment.set('EVENT_ID', json.data._id);"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{FIREBASE_TOKEN}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Team Sync\",\n  \"description\": \"Weekly alignment\",\n  \"location\": \"Zoom\",\n  \"startAt\": \"2026-04-01T09:00:00.000Z\",\n  \"endAt\": \"2026-04-01T10:00:00.000Z\",\n  \"visibility\": \"shared\"\n}"
+            },
+            "url": { "raw": "{{BASE_URL}}/api/events", "host": ["{{BASE_URL}}"], "path": ["api", "events"] }
+          }
+        },
+        {
+          "name": "GET /api/events – List",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": ["pm.test('Status 200', () => pm.response.to.have.status(200));"],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{FIREBASE_TOKEN}}" }],
+            "url": {
+              "raw": "{{BASE_URL}}/api/events?page=1&limit=10",
+              "host": ["{{BASE_URL}}"],
+              "path": ["api", "events"],
+              "query": [
+                { "key": "page", "value": "1" },
+                { "key": "limit", "value": "10" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "GET /api/events/:id – Get One",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": ["pm.test('Status 200', () => pm.response.to.have.status(200));"],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{FIREBASE_TOKEN}}" }],
+            "url": { "raw": "{{BASE_URL}}/api/events/{{EVENT_ID}}", "host": ["{{BASE_URL}}"], "path": ["api", "events", "{{EVENT_ID}}"] }
+          }
+        },
+        {
+          "name": "PATCH /api/events/:id – Update",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": ["pm.test('Status 200', () => pm.response.to.have.status(200));"],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "PATCH",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{FIREBASE_TOKEN}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": { "mode": "raw", "raw": "{\n  \"title\": \"Team Sync (Updated)\",\n  \"location\": \"Google Meet\"\n}" },
+            "url": { "raw": "{{BASE_URL}}/api/events/{{EVENT_ID}}", "host": ["{{BASE_URL}}"], "path": ["api", "events", "{{EVENT_ID}}"] }
+          }
+        },
+        {
+          "name": "DELETE /api/events/:id – Soft Delete",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": ["pm.test('Status 204', () => pm.response.to.have.status(204));"],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "DELETE",
+            "header": [{ "key": "Authorization", "value": "Bearer {{FIREBASE_TOKEN}}" }],
+            "url": { "raw": "{{BASE_URL}}/api/events/{{EVENT_ID}}", "host": ["{{BASE_URL}}"], "path": ["api", "events", "{{EVENT_ID}}"] }
+          }
+        },
+        {
+          "name": "POST /api/events/:id/invite",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 201', () => pm.response.to.have.status(201));",
+                  "const json = pm.response.json();",
+                  "if (json.data && json.data[0]) pm.environment.set('INVITATION_ID', json.data[0].invitationId);"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{FIREBASE_TOKEN}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": { "mode": "raw", "raw": "{\n  \"emails\": [\"invitee@example.com\"]\n}" },
+            "url": { "raw": "{{BASE_URL}}/api/events/{{EVENT_ID}}/invite", "host": ["{{BASE_URL}}"], "path": ["api", "events", "{{EVENT_ID}}", "invite"] }
+          }
+        },
+        {
+          "name": "GET /api/events/:id/attendees",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{FIREBASE_TOKEN}}" }],
+            "url": { "raw": "{{BASE_URL}}/api/events/{{EVENT_ID}}/attendees", "host": ["{{BASE_URL}}"], "path": ["api", "events", "{{EVENT_ID}}", "attendees"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Invitations",
+      "item": [
+        {
+          "name": "GET /api/invitations – My Invitations",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": ["pm.test('Status 200', () => pm.response.to.have.status(200));"],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{FIREBASE_TOKEN}}" }],
+            "url": { "raw": "{{BASE_URL}}/api/invitations", "host": ["{{BASE_URL}}"], "path": ["api", "invitations"] }
+          }
+        },
+        {
+          "name": "POST /api/invitations/:id/respond – RSVP",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": ["pm.test('Status 200', () => pm.response.to.have.status(200));"],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{FIREBASE_TOKEN}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": { "mode": "raw", "raw": "{\n  \"status\": \"attending\"\n}" },
+            "url": { "raw": "{{BASE_URL}}/api/invitations/{{INVITATION_ID}}/respond", "host": ["{{BASE_URL}}"], "path": ["api", "invitations", "{{INVITATION_ID}}", "respond"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "AI",
+      "item": [
+        {
+          "name": "POST /api/ai/parse-event",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200 or 503', () => pm.expect([200, 503]).to.include(pm.response.code));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{FIREBASE_TOKEN}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": { "mode": "raw", "raw": "{\n  \"text\": \"Product demo with the design team next Monday at 2pm for 45 minutes in the main conference room\"\n}" },
+            "url": { "raw": "{{BASE_URL}}/api/ai/parse-event", "host": ["{{BASE_URL}}"], "path": ["api", "ai", "parse-event"] }
+          }
+        },
+        {
+          "name": "POST /api/ai/suggest-times",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{FIREBASE_TOKEN}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Design Review\",\n  \"durationMinutes\": 60,\n  \"dateRangeStart\": \"2026-04-01T00:00:00.000Z\",\n  \"dateRangeEnd\": \"2026-04-05T23:59:59.000Z\",\n  \"timezone\": \"America/New_York\"\n}"
+            },
+            "url": { "raw": "{{BASE_URL}}/api/ai/suggest-times", "host": ["{{BASE_URL}}"], "path": ["api", "ai", "suggest-times"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Health",
+      "item": [
+        {
+          "name": "GET /health",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200 or 503', () => pm.expect([200, 503]).to.include(pm.response.code));",
+                  "pm.test('Has status field', () => pm.expect(pm.response.json()).to.have.property('status'));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{BASE_URL}}/health", "host": ["{{BASE_URL}}"], "path": ["health"] }
+          }
+        }
+      ]
+    }
+  ]
+}
