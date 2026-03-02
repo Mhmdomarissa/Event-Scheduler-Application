@@ -24,8 +24,16 @@ export function validate<T>(schema: ZodSchema<T>, target: ValidationTarget = 'bo
       return next(err);
     }
 
-    // Replace the raw value with the cleaned/coerced output
-    (req as unknown as Record<string, unknown>)[target] = result.data;
+    // Replace the raw value with the cleaned/coerced output.
+    // NOTE: In Express 5, req.query is a read-only getter – we cannot reassign it;
+    // instead we mutate the existing object in-place (clear + repopulate).
+    if (target === 'query') {
+      const q = req.query as Record<string, unknown>;
+      for (const key of Object.keys(q)) delete q[key];
+      Object.assign(q, result.data as Record<string, unknown>);
+    } else {
+      (req as unknown as Record<string, unknown>)[target] = result.data;
+    }
     next();
   };
 }
