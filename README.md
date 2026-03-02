@@ -16,6 +16,13 @@
 
 **Demo accounts** — sign up with any email/password, or use Google OAuth on the frontend.
 
+| Role | Email | Password |
+|------|-------|----------|
+| **Admin** | `admin@test.com` | `mkmkpoiu` |
+| **Member** | _(sign up with any email — accounts are created instantly)_ | |
+
+> The admin account has full access: edit, delete, and invite on any event. Sign up as a new user to test the member experience.
+
 ---
 
 ## Features
