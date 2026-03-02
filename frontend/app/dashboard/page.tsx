@@ -67,6 +67,30 @@ export default function DashboardPage() {
           </div>
         )}
 
+        {data?.meta && data.meta.totalPages > 1 && (
+          <div className="flex items-center justify-center gap-2 pt-2">
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={!data.meta.hasPrevPage}
+              onClick={() => setFilters((f) => ({ ...f, page: (f.page ?? 1) - 1 }))}
+            >
+              Previous
+            </Button>
+            <span className="text-sm text-muted-foreground">
+              Page {data.meta.page} of {data.meta.totalPages}
+            </span>
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={!data.meta.hasNextPage}
+              onClick={() => setFilters((f) => ({ ...f, page: (f.page ?? 1) + 1 }))}
+            >
+              Next
+            </Button>
+          </div>
+        )}
+
         {data?.meta && (
           <p className="text-center text-sm text-muted-foreground">
             Showing {events.length} of {data.meta.total} events

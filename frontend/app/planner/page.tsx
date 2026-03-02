@@ -152,7 +152,7 @@ export default function PlannerPage() {
                   <CardContent className="pt-4 pb-4 space-y-3">
                     <div className="space-y-1">
                       <p className="font-medium text-sm">
-                        {slot.label ?? format(new Date(slot.startAt), "EEEE, MMM d, yyyy")}
+                        {format(new Date(slot.startAt), "EEEE, MMM d, yyyy")}
                       </p>
                       <p className="text-xs text-muted-foreground flex items-center gap-1.5">
                         <Clock4 className="size-3" />
@@ -161,9 +161,9 @@ export default function PlannerPage() {
                       </p>
                     </div>
 
-                    {slot.score !== undefined && (
+                    {slot.explanation && (
                       <p className="text-xs text-muted-foreground">
-                        Score: {slot.score}/10
+                        {slot.explanation}
                       </p>
                     )}
 

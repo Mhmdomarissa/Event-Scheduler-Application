@@ -9,10 +9,11 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { useInvitations, useRespondToInvitation } from "@/features/invitations/hooks";
-import { Mail, CalendarDays, Clock, MapPin, Check, X, HelpCircle } from "lucide-react";
+import { Mail, CalendarDays, Clock, MapPin, Check, X, HelpCircle, ExternalLink } from "lucide-react";
 import { format } from "date-fns";
 import { statusConfig } from "@/lib/utils";
 import type { Event } from "@/types";
+import Link from "next/link";
 
 const RSVP_OPTIONS = [
   { value: "attending", label: "Attending", icon: Check, color: "bg-emerald-500 hover:bg-emerald-600" },
@@ -21,7 +22,7 @@ const RSVP_OPTIONS = [
 ] as const;
 
 export default function InvitationsPage() {
-  const { data, isLoading, isError, error } = useInvitations();
+  const { data, isLoading, isError, error, refetch } = useInvitations();
   const respond = useRespondToInvitation();
 
   const invitations = data?.data ?? [];
@@ -40,6 +41,7 @@ export default function InvitationsPage() {
         {isError && (
           <ErrorMessage
             error={error}
+            onRetry={() => refetch()}
           />
         )}
 
@@ -69,7 +71,17 @@ export default function InvitationsPage() {
                             <Badge className={statusCfg.color}>{statusCfg.label}</Badge>
                           )}
                           <h3 className="font-semibold">
-                            {event?.title ?? "Unknown Event"}
+                            {event ? (
+                              <Link
+                                href={`/events/${typeof inv.eventId === "string" ? inv.eventId : inv.eventId.id}`}
+                                className="hover:underline underline-offset-4 inline-flex items-center gap-1"
+                              >
+                                {event.title}
+                                <ExternalLink className="size-3" />
+                              </Link>
+                            ) : (
+                              "Unknown Event"
+                            )}
                           </h3>
                         </div>
 

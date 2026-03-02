@@ -1,7 +1,7 @@
 "use client";
 
 import { Suspense, useState, useEffect } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -11,57 +11,59 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { loginWithEmail, resetPassword } from "@/lib/firebase";
+import { signUpWithEmail } from "@/lib/firebase";
 import { toast } from "sonner";
 import { useAuth } from "@/features/auth/AuthProvider";
 
-const schema = z.object({
-  email: z.string().email("Enter a valid email"),
-  password: z.string().min(6, "Password must be at least 6 characters"),
-});
+const schema = z
+  .object({
+    displayName: z.string().min(2, "Name must be at least 2 characters"),
+    email: z.string().email("Enter a valid email"),
+    password: z.string().min(6, "Password must be at least 6 characters"),
+    confirmPassword: z.string(),
+  })
+  .refine((d) => d.password === d.confirmPassword, {
+    message: "Passwords don't match",
+    path: ["confirmPassword"],
+  });
 
 type FormValues = z.infer<typeof schema>;
 
-export default function LoginPage() {
+export default function SignUpPage() {
   return (
     <Suspense>
-      <LoginForm />
+      <SignUpForm />
     </Suspense>
   );
 }
 
-function LoginForm() {
+function SignUpForm() {
   const router = useRouter();
-  const searchParams = useSearchParams();
   const { firebaseUser, loading } = useAuth();
   const [showPassword, setShowPassword] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [resetSent, setResetSent] = useState(false);
 
-  const from = searchParams.get("from") ?? "/dashboard";
-
-  // Redirect if already logged in
   useEffect(() => {
     if (!loading && firebaseUser) {
-      router.replace(from);
+      router.replace("/dashboard");
     }
-  }, [firebaseUser, loading, router, from]);
+  }, [firebaseUser, loading, router]);
 
   const {
     register,
     handleSubmit,
     formState: { errors },
-  } = useForm<FormValues>({ resolver: zodResolver(schema) });
+  } = useForm<FormValues>({ resolver: zodResolver(schema) as never });
 
-  const onSubmit = async ({ email, password }: FormValues) => {
+  const onSubmit = async ({ email, password, displayName }: FormValues) => {
     setIsSubmitting(true);
     try {
-      await loginWithEmail(email, password);
-      toast.success("Welcome back!");
-      router.replace(from);
+      await signUpWithEmail(email, password, displayName);
+      toast.success("Account created! Welcome to Schedula.");
+      router.replace("/dashboard");
     } catch (err: unknown) {
       const message =
-        err instanceof Error ? err.message : "Login failed. Check your credentials.";
+        err instanceof Error ? err.message : "Sign-up failed. Try again.";
       toast.error(message);
     } finally {
       setIsSubmitting(false);
@@ -77,12 +79,26 @@ function LoginForm() {
           <div className="mx-auto mb-3 flex size-12 items-center justify-center rounded-xl bg-primary/10">
             <Calendar className="size-6 text-primary" />
           </div>
-          <CardTitle className="text-xl">Sign in</CardTitle>
-          <CardDescription>to Event Scheduler v5</CardDescription>
+          <CardTitle className="text-xl">Create an account</CardTitle>
+          <CardDescription>Get started with Event Scheduler</CardDescription>
         </CardHeader>
 
         <CardContent>
           <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
+            <div className="space-y-1.5">
+              <Label htmlFor="displayName">Name</Label>
+              <Input
+                id="displayName"
+                autoComplete="name"
+                placeholder="Your name"
+                {...register("displayName")}
+                className={errors.displayName ? "border-destructive" : ""}
+              />
+              {errors.displayName && (
+                <p className="text-xs text-destructive">{errors.displayName.message}</p>
+              )}
+            </div>
+
             <div className="space-y-1.5">
               <Label htmlFor="email">Email</Label>
               <Input
@@ -104,7 +120,7 @@ function LoginForm() {
                 <Input
                   id="password"
                   type={showPassword ? "text" : "password"}
-                  autoComplete="current-password"
+                  autoComplete="new-password"
                   placeholder="••••••••"
                   {...register("password")}
                   className={errors.password ? "border-destructive pr-10" : "pr-10"}
@@ -120,32 +136,32 @@ function LoginForm() {
               {errors.password && (
                 <p className="text-xs text-destructive">{errors.password.message}</p>
               )}
-              <button
-                type="button"
-                className="text-xs text-primary hover:underline underline-offset-4"
-                onClick={async () => {
-                  const email = (document.getElementById("email") as HTMLInputElement)?.value;
-                  if (!email) { toast.error("Enter your email first"); return; }
-                  try {
-                    await resetPassword(email);
-                    setResetSent(true);
-                    toast.success("Password reset email sent!");
-                  } catch { toast.error("Failed to send reset email."); }
-                }}
-              >
-                {resetSent ? "Reset email sent ✓" : "Forgot password?"}
-              </button>
+            </div>
+
+            <div className="space-y-1.5">
+              <Label htmlFor="confirmPassword">Confirm Password</Label>
+              <Input
+                id="confirmPassword"
+                type={showPassword ? "text" : "password"}
+                autoComplete="new-password"
+                placeholder="••••••••"
+                {...register("confirmPassword")}
+                className={errors.confirmPassword ? "border-destructive" : ""}
+              />
+              {errors.confirmPassword && (
+                <p className="text-xs text-destructive">{errors.confirmPassword.message}</p>
+              )}
             </div>
 
             <Button type="submit" className="w-full" disabled={isSubmitting}>
-              {isSubmitting ? "Signing in…" : "Sign in"}
+              {isSubmitting ? "Creating account…" : "Sign up"}
             </Button>
           </form>
 
           <p className="mt-4 text-center text-xs text-muted-foreground">
-            Don&apos;t have an account?{" "}
-            <Link href="/signup" className="text-primary underline-offset-4 hover:underline">
-              Sign up
+            Already have an account?{" "}
+            <Link href="/login" className="text-primary underline-offset-4 hover:underline">
+              Sign in
             </Link>
           </p>
         </CardContent>

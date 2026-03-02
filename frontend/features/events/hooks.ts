@@ -1,6 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { useRouter } from "next/navigation";
 import { ApiError } from "@/lib/api";
 import type { CreateEventPayload, UpdateEventPayload, InvitePayload, EventFilters } from "@/types";
 import {
@@ -85,7 +84,6 @@ export function useUpdateEvent(id: string) {
 
 export function useDeleteEvent() {
   const qc = useQueryClient();
-  const router = useRouter();
 
   return useMutation({
     mutationFn: (id: string) => deleteEvent(id),

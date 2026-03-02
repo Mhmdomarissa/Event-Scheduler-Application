@@ -48,7 +48,7 @@ export function Hero() {
 
           <div className="flex flex-wrap gap-3 pt-2">
             <Button size="lg" asChild>
-              <Link href={firebaseUser ? "/dashboard" : "/login"}>
+              <Link href={firebaseUser ? "/dashboard" : "/signup"}>
                 {firebaseUser ? "Go to Dashboard" : "Get Started"}
                 <ArrowRight className="ml-2 size-4" />
               </Link>

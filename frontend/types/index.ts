@@ -100,8 +100,7 @@ export interface ParsedEventFields {
 export interface SuggestedTimeSlot {
   startAt: string;
   endAt: string;
-  label?: string;
-  score?: number;
+  explanation?: string;
 }
 
 // ─── Filter types ────────────────────────────────────────────────────────────

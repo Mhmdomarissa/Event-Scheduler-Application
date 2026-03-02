@@ -10,7 +10,7 @@ import {
 } from "react";
 import { type User as FirebaseUser } from "firebase/auth";
 import { auth, onAuthStateChanged, logout as firebaseLogout } from "@/lib/firebase";
-import { api } from "@/lib/api";
+import { api, ApiError } from "@/lib/api";
 import type { User } from "@/types";
 
 interface AuthContextValue {
@@ -27,12 +27,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
 
-  const fetchProfile = useCallback(async () => {
+  const fetchProfile = useCallback(async (): Promise<boolean> => {
     try {
       const res = await api.get<User>("/api/auth/me");
       setUser(res.data);
-    } catch {
+      return true;
+    } catch (err) {
+      // Account deactivated (F-05) or other 403 → force logout
+      if (err instanceof ApiError && (err.isForbidden || err.isUnauthorized)) {
+        await firebaseLogout();
+        setUser(null);
+        return false;
+      }
       setUser(null);
+      return false;
     }
   }, []);
 

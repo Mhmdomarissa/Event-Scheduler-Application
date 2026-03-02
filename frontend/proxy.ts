@@ -11,7 +11,7 @@ import { NextResponse, type NextRequest } from "next/server";
  * the Firebase SDK state via useAuth and redirects unauthenticated
  * users to /login.
  */
-export function middleware(_req: NextRequest) {
+export function proxy(_req: NextRequest) {
   return NextResponse.next();
 }
 
