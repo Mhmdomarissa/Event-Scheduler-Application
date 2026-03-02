@@ -45,6 +45,8 @@ export default function EventDetailPage() {
   const event = eventData?.data;
   const attendees = attendeesData?.data ?? [];
   const isOwner = user?.id === (typeof event?.createdBy === "string" ? event.createdBy : event?.createdBy?.id);
+  const isAdmin = user?.role === "admin";
+  const canManage = isOwner || isAdmin;
 
   const handleDelete = async () => {
     if (!confirm("Delete this event? This cannot be undone.")) return;
@@ -75,7 +77,7 @@ export default function EventDetailPage() {
             </Link>
           </Button>
 
-          {isOwner && (
+          {canManage && (
             <div className="flex gap-2">
               <Button variant="outline" size="sm" onClick={() => setInviteOpen(true)}>
                 <UserPlus className="size-4 mr-1.5" /> Invite
@@ -183,7 +185,7 @@ export default function EventDetailPage() {
         </div>
       </div>
 
-      {isOwner && (
+      {canManage && (
         <>
           <EventFormDialog
             editEvent={event}

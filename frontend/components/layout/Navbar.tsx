@@ -12,7 +12,9 @@ import {
   User,
   Menu,
   X,
+  Shield,
 } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
@@ -114,14 +116,21 @@ export function Navbar() {
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-52">
               <DropdownMenuLabel>
-                <div className="font-medium">{user?.displayName || "Account"}</div>
+                <div className="font-medium flex items-center gap-1.5">
+                  {user?.displayName || "Account"}
+                  {user?.role === "admin" && (
+                    <Badge variant="default" className="text-[10px] px-1.5 py-0 h-4 gap-0.5">
+                      <Shield className="size-2.5" /> Admin
+                    </Badge>
+                  )}
+                </div>
                 <div className="text-xs text-muted-foreground font-normal truncate">
                   {user?.email}
                 </div>
               </DropdownMenuLabel>
               <DropdownMenuSeparator />
               <DropdownMenuItem asChild>
-                <Link href="/dashboard" className="cursor-pointer">
+                <Link href="/profile" className="cursor-pointer">
                   <User className="size-4 mr-2" /> Profile
                 </Link>
               </DropdownMenuItem>

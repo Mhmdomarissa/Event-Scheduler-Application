@@ -2,6 +2,8 @@ import { initializeApp, getApps, getApp } from "firebase/app";
 import {
   getAuth,
   signInWithEmailAndPassword,
+  signInWithPopup,
+  GoogleAuthProvider,
   createUserWithEmailAndPassword,
   sendPasswordResetEmail,
   updateProfile,
@@ -22,10 +24,16 @@ const firebaseConfig = {
 const app = getApps().length ? getApp() : initializeApp(firebaseConfig);
 export const auth = getAuth(app);
 
+const googleProvider = new GoogleAuthProvider();
+
 // ─── Auth helpers ─────────────────────────────────────────────────────────────
 
 export async function loginWithEmail(email: string, password: string) {
   return signInWithEmailAndPassword(auth, email, password);
+}
+
+export async function loginWithGoogle() {
+  return signInWithPopup(auth, googleProvider);
 }
 
 export async function signUpWithEmail(email: string, password: string, displayName: string) {
