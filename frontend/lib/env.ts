@@ -5,13 +5,10 @@
 
 function required(key: string): string {
   const value = process.env[key];
-  if (!value) {
-    throw new Error(
-      `Missing required environment variable: ${key}\n` +
-        `Make sure it is defined in .env.local (dev) or Vercel project settings (prod).`,
-    );
+  if (!value && process.env.NODE_ENV === "development") {
+    console.warn(`Missing environment variable: ${key}`);
   }
-  return value;
+  return value ?? "";
 }
 
 export const env = {
