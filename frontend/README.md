@@ -1,73 +1,78 @@
-# Event Scheduler Application — Frontend
+# Event Scheduler — Frontend
 
-Full-featured Next.js frontend for the Event Scheduler v5 API.
+Next.js 16 frontend for the Event Scheduler platform. Connects to the Express backend via REST API with Firebase Authentication.
+
+**Live:** [event-scheduler-application-beta.vercel.app](https://event-scheduler-application-beta.vercel.app)
+
+---
 
 ## Tech Stack
 
 | Layer | Technology |
 |---|---|
-| Framework | Next.js 16 (App Router) |
-| Language | TypeScript |
+| Framework | Next.js 16 (App Router, Turbopack) |
+| Language | TypeScript (strict) |
 | Styling | Tailwind CSS v4 + shadcn/ui v4 |
-| State / Data | @tanstack/react-query v5 |
+| State / Data | TanStack React Query v5 |
 | Forms | React Hook Form + Zod |
-| Auth | Firebase Authentication (email/password) |
+| Auth | Firebase JS SDK (email/password + Google OAuth) |
 | Animation | Framer Motion |
-| Date utilities | date-fns |
+| Date | date-fns |
 | Notifications | Sonner |
+| Theme | next-themes (dark / light / system) |
+
+---
 
 ## Features
 
-- **Landing page** — 3D animated hero, feature cards, how-it-works section
-- **Authentication** — Firebase email/password sign-in, middleware-protected routes
-- **Dashboard** — Event list with search, status, location and date-range filters
-- **Event detail** — Full event info, attendees list with RSVP status, edit/delete/invite (owner only)
-- **Invitations** — View and respond to received invitations (Attending / Maybe / Declined)
-- **AI Planner** — Input event title + duration + date range → AI-generated time slot suggestions → one-click create
+- **Landing Page** — 3D animated hero, feature cards, how-it-works section
+- **Auth** — Email/password sign-in & sign-up, Google OAuth, forgot password
+- **Dark / Light Mode** — System-aware toggle in the navbar
+- **Dashboard** — Event list with search, status, location, and date-range filters + pagination
+- **Event Detail** — Full event info, attendee list with RSVP badges, edit / delete / invite actions
+- **Invitations** — View and respond to received invitations (Attending / Maybe / Declined), links to event detail
+- **AI Planner** — Describe an event + date range -> get AI-suggested time slots -> one-click create
+- **Profile Page** — Display name, email, role, account status, member-since, auth provider
+- **Admin UI** — Admin badge in navbar, admins can manage any event (not just their own)
+
+---
 
 ## Getting Started
 
-### 1. Prerequisites
+### Prerequisites
 
 - Node.js 20+
-- A Firebase project with Email/Password auth enabled
-- The deployed backend URL (Railway or local)
+- Firebase project with Email/Password + Google auth enabled
+- Deployed backend URL (Railway) or local backend on `http://localhost:3000`
 
-### 2. Install dependencies
+### Install & Run
 
 ```bash
 cd frontend
 npm install
-```
-
-### 3. Configure environment variables
-
-Create `.env.local` in the `frontend/` directory:
-
-```env
-NEXT_PUBLIC_API_URL=https://event-scheduler-application-production.up.railway.app
-NEXT_PUBLIC_FIREBASE_API_KEY=your_firebase_api_key
-NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN=your_project.firebaseapp.com
-NEXT_PUBLIC_FIREBASE_PROJECT_ID=your_project_id
-NEXT_PUBLIC_FIREBASE_APP_ID=your_firebase_app_id
-```
-
-> **Get your Firebase App ID**: Firebase Console → Project Settings → Your apps → Web app → App ID
-
-### 4. Run in development
-
-```bash
+cp .env.example .env.local
+# Edit .env.local with your values
 npm run dev
 ```
 
-Visit [http://localhost:3000](http://localhost:3000).
+### Environment Variables (`.env.local`)
 
-### 5. Build for production
+| Variable | Description |
+|----------|-------------|
+| `NEXT_PUBLIC_API_URL` | Backend URL (e.g. `https://...up.railway.app`) |
+| `NEXT_PUBLIC_FIREBASE_API_KEY` | Firebase Web API key |
+| `NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN` | `your-project.firebaseapp.com` |
+| `NEXT_PUBLIC_FIREBASE_PROJECT_ID` | Firebase project ID |
+| `NEXT_PUBLIC_FIREBASE_APP_ID` | Firebase app ID |
+
+### Build for Production
 
 ```bash
 npm run build
 npm start
 ```
+
+---
 
 ## Project Structure
 
@@ -75,43 +80,37 @@ npm start
 frontend/
 ├── app/                     # Next.js App Router pages
 │   ├── page.tsx             # Landing page
-│   ├── login/page.tsx       # Sign-in
-│   ├── dashboard/page.tsx   # Event list
-│   ├── events/[id]/page.tsx # Event detail
-│   ├── invitations/page.tsx # RSVP inbox
-│   └── planner/page.tsx     # AI time suggester
+│   ├── login/               # Sign-in (email + Google)
+│   ├── signup/              # Sign-up (email + Google)
+│   ├── dashboard/           # Event list with filters
+│   ├── events/[id]/         # Event detail + management
+│   ├── invitations/         # RSVP inbox
+│   ├── planner/             # AI time suggester
+│   └── profile/             # User profile
 ├── components/
 │   ├── landing/             # Hero, FeatureCards, HowItWorks, Footer
 │   ├── layout/              # Navbar, AppShell
-│   └── shared/              # LoadingSkeleton, ErrorMessage, EmptyState, PageHeader
+│   ├── shared/              # ThemeToggle, LoadingSkeleton, ErrorMessage, EmptyState, PageHeader
+│   └── ui/                  # shadcn/ui primitives
 ├── features/
 │   ├── auth/                # AuthProvider, useAuth
-│   ├── events/              # services, hooks, EventCard, EventFormDialog, etc.
+│   ├── events/              # services, hooks, EventCard, EventFormDialog, InviteDialog, etc.
 │   ├── invitations/         # services, hooks
 │   └── ai/                  # services, hooks
 ├── lib/
-│   ├── api.ts               # Typed API client (auto token injection)
-│   ├── firebase.ts          # Firebase init + auth helpers
+│   ├── api.ts               # Typed API client (auto Bearer token injection)
+│   ├── firebase.ts          # Firebase init + auth helpers (email, Google, reset)
 │   ├── env.ts               # Env var validation
-│   └── utils.ts             # cn, date helpers, statusConfig, rsvpConfig
-├── types/
-│   └── index.ts             # All domain types (Event, Invitation, etc.)
-└── middleware.ts             # Route protection
+│   └── utils.ts             # cn, statusConfig, rsvpConfig
+├── types/index.ts           # Domain types (Event, Invitation, User, etc.)
+└── proxy.ts                 # Next.js middleware (passthrough)
 ```
+
+---
 
 ## Deployment (Vercel)
 
-1. Push the `frontend/` folder to GitHub (or a monorepo)
-2. Import the project at [vercel.com](https://vercel.com)
-3. Set the **root directory** to `frontend`
-4. Add all `NEXT_PUBLIC_*` env vars in Vercel → Settings → Environment Variables
-5. After deploy, add your Vercel domain to Railway's `ALLOWED_ORIGINS` env var
-
-## API
-
-Production backend: `https://event-scheduler-application-production.up.railway.app`
-
-Health check: `/health`
-
-All API calls are proxied through `lib/api.ts` which automatically injects the Firebase ID token as a `Bearer` header.
-
+1. Import repo at [vercel.com](https://vercel.com) — set root directory to `frontend`
+2. Add all `NEXT_PUBLIC_*` env vars in Vercel dashboard
+3. Add your Vercel domain to the backend's `ALLOWED_ORIGINS` env var
+4. Add your Vercel domain to Firebase Console -> Authentication -> Authorized domains
