@@ -58,7 +58,7 @@ export function EventFiltersBar({ filters, onFiltersChange }: EventFiltersProps)
       <Select
         value={currentStatus ?? ""}
         onValueChange={(v) => {
-          setValue("status", v as EventFilters["status"]);
+          setValue("status", v === "all" ? undefined : v as EventFilters["status"]);
           handleSubmit(onSubmit)();
         }}
       >
@@ -67,7 +67,7 @@ export function EventFiltersBar({ filters, onFiltersChange }: EventFiltersProps)
           <SelectValue placeholder="Status" />
         </SelectTrigger>
         <SelectContent>
-          <SelectItem value="">All</SelectItem>
+          <SelectItem value="all">All</SelectItem>
           <SelectItem value="upcoming">Upcoming</SelectItem>
           <SelectItem value="ongoing">Ongoing</SelectItem>
           <SelectItem value="past">Past</SelectItem>

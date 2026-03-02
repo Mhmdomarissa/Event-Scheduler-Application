@@ -44,7 +44,8 @@ const corsOptions: cors.CorsOptions = {
   origin:
     allowedOrigins.length > 0
       ? (origin, callback) => {
-          if (!origin) return callback(null, false); // deny non-browser requests in prod
+          // Preflight/server-to-server requests have no origin – allow them
+          if (!origin) return callback(null, true);
           if (allowedOrigins.includes(origin)) return callback(null, true);
           logger.warn('CORS blocked request', { origin });
           callback(new Error('Not allowed by CORS'));

@@ -70,7 +70,7 @@ export function Navbar() {
                 key={href}
                 href={href}
                 className={cn(
-                  "flex items-center gap-2 rounded-md px-3 py-1.5 text-sm font-medium transition-colors",
+                  "relative flex items-center gap-2 rounded-md px-3 py-1.5 text-sm font-medium transition-colors",
                   active
                     ? "bg-primary/10 text-primary"
                     : "text-muted-foreground hover:bg-accent hover:text-accent-foreground",

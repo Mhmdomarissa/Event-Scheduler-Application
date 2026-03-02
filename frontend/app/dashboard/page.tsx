@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Plus } from "lucide-react";
+import { Plus, Calendar } from "lucide-react";
 import { AppShell } from "@/components/layout/AppShell";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { Button } from "@/components/ui/button";
@@ -13,7 +13,6 @@ import { ErrorMessage } from "@/components/shared/ErrorMessage";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { useEvents } from "@/features/events/hooks";
 import type { EventFilters } from "@/types";
-import { Calendar } from "lucide-react";
 
 export default function DashboardPage() {
   const [filters, setFilters] = useState<EventFilters>({});

@@ -53,7 +53,7 @@ export default function EventDetailPage() {
       toast.success("Event deleted");
       router.push("/dashboard");
     } catch {
-      // handled in hook
+      toast.error("Failed to delete event");
     }
   };
 

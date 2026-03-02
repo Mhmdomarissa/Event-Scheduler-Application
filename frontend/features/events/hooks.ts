@@ -91,8 +91,6 @@ export function useDeleteEvent() {
     mutationFn: (id: string) => deleteEvent(id),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: eventKeys.all() });
-      toast.success("Event deleted");
-      router.push("/dashboard");
     },
     onError: (err) => {
       toast.error(err instanceof Error ? err.message : "Failed to delete event");

@@ -262,7 +262,7 @@ export function EventFormDialog({ open, onOpenChange, defaultValues, editEvent }
               <FormField control={form.control} name="visibility" render={({ field }) => (
                 <FormItem>
                   <FormLabel>Visibility</FormLabel>
-                  <Select onValueChange={field.onChange} defaultValue={field.value}>
+                  <Select onValueChange={field.onChange} value={field.value}>
                     <FormControl>
                       <SelectTrigger><SelectValue /></SelectTrigger>
                     </FormControl>
