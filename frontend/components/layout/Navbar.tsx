@@ -29,6 +29,7 @@ import {
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/features/auth/AuthProvider";
 import { toast } from "sonner";
+import { ThemeToggle } from "@/components/shared/ThemeToggle";
 
 const navLinks = [
   { href: "/dashboard",    label: "Dashboard",    icon: LayoutDashboard },
@@ -93,6 +94,8 @@ export function Navbar() {
 
         {/* Right side */}
         <div className="flex items-center gap-2">
+          <ThemeToggle />
+
           {/* Mobile toggle */}
           <Button
             variant="ghost"
